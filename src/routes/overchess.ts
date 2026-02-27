@@ -1,9 +1,19 @@
 import type { Square } from 'chess.js';
 
+export type OverlaySettings = {
+	side: 'white' | 'black' | 'both';
+	style: 'squares' | 'arrows';
+};
+
+export const defaultSettings: OverlaySettings = {
+	side: 'white',
+	style: 'squares'
+};
+
 export type OverchessApi = {
 	enableInput: () => void;
 	updateInfo: () => void;
-	updateOverlay: () => void;
+	updateOverlay: (settings: OverlaySettings) => void;
 };
 
 export async function initOverchess(
@@ -11,22 +21,18 @@ export async function initOverchess(
 	turnEl: HTMLElement,
 	statusEl: HTMLElement
 ): Promise<OverchessApi> {
-	// dynamic/browser-only imports
 	const { Chess } = await import('chess.js');
 	const { Chessboard, COLOR, INPUT_EVENT_TYPE, FEN } = await import('cm-chessboard');
 	const { Markers, MARKER_TYPE } = await import('cm-chessboard/src/extensions/markers/Markers.js');
 
-	// ---------------- Stockfish worker ----------------
+	// ---------------- Stockfish ----------------
 	const worker = new Worker('/stockfish-18-lite-single.js');
 	let stockfishReady = false;
-
 	worker.postMessage('uci');
 	worker.postMessage('setoption name Skill Level value 10');
 	worker.postMessage('ucinewgame');
 
-	// placeholders for closure-bound state
 	const chess = new Chess();
-	// board is created below after we have boardEl
 	const board = new Chessboard(boardEl, {
 		position: FEN.start,
 		assetsUrl: '/cm-chessboard/assets/',
@@ -53,20 +59,20 @@ export async function initOverchess(
 	function applyStockfishMove(uciMove: string) {
 		const from = uciMove.slice(0, 2);
 		const to = uciMove.slice(2, 4);
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		 
 		const promotion = (uciMove[4] as any) ?? undefined;
 		try {
 			chess.move({ from, to, promotion });
 			board.setPosition(chess.fen(), true);
 			updateInfo();
-			updateOverlay();
+			updateOverlay(currentSettings);
 			if (!chess.isGameOver()) setTimeout(() => enableInput(), 350);
 		} catch (err) {
 			console.error('Stockfish move failed:', uciMove, err);
 		}
 	}
 
-	// ---------------- Board state and handlers ----------------
+	// ---------------- Board ----------------
 	function updateInfo() {
 		if (chess.isGameOver()) {
 			turnEl.textContent = '';
@@ -90,9 +96,9 @@ export async function initOverchess(
 		switch (event.type) {
 			case INPUT_EVENT_TYPE.moveInputStarted: {
 				board.removeLegalMovesMarkers();
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				 
 				const moves = chess.moves({ square: event.squareFrom as any, verbose: true });
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				 
 				board.addLegalMovesMarkers(moves.map((m: any) => ({ to: m.to, capture: !!m.captured })));
 				return moves.length > 0;
 			}
@@ -103,7 +109,7 @@ export async function initOverchess(
 					if (!result) return false;
 					board.setPosition(chess.fen(), true);
 					updateInfo();
-					updateOverlay();
+					updateOverlay(currentSettings);
 					if (!chess.isGameOver()) {
 						board.disableMoveInput();
 						setTimeout(() => askStockfish(), 300);
@@ -120,22 +126,21 @@ export async function initOverchess(
 		return true;
 	}
 
-	// ---------------- Overlay setup ----------------
+	// ---------------- Overlay ----------------
 	const SVG_NS = 'http://www.w3.org/2000/svg';
 	const FILES = 'abcdefgh';
-	const PIECE_COLOR: Record<string, string> = {
-		// white pieces
-		p: '#b088ff', // soft purple
-		n: '#00d4ff', // cyan  (shared with bishop)
-		b: '#00d4ff', // cyan
-		r: '#ff00cc', // magenta  (shared with queen)
-		q: '#ff00cc', // magenta
-		k: '#ffe500', // yellow
-		// black pieces — all one color, dashed stroke handles the distinction
-		_black: '#ff2222'
-	};
 
-	// use provided boardEl as wrapper
+	// white pieces get distinct colors, black pieces all get red
+	const PIECE_COLOR: Record<string, string> = {
+		p: '#b088ff', // soft purple
+		n: '#00d4ff', // cyan (shared with bishop)
+		b: '#00d4ff',
+		r: '#ff00cc', // magenta (shared with queen)
+		q: '#ff00cc',
+		k: '#ffe500' // yellow
+	};
+	const BLACK_COLOR = '#ff2222';
+
 	const boardWrap = boardEl;
 	boardWrap.style.position = 'relative';
 
@@ -144,6 +149,8 @@ export async function initOverchess(
 	svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
 
 	const defs = document.createElementNS(SVG_NS, 'defs');
+
+	// hatch pattern for contested squares
 	function makeHatch(id: string, c1: string, c2: string) {
 		const pat = document.createElementNS(SVG_NS, 'pattern');
 		pat.setAttribute('id', id);
@@ -165,6 +172,37 @@ export async function initOverchess(
 		return pat;
 	}
 	defs.appendChild(makeHatch('hatch-both', 'rgba(80,200,80,0.45)', 'rgba(220,60,60,0.45)'));
+
+	// arrowhead markers — one per unique color
+	function makeArrowMarker(id: string, color: string) {
+		const marker = document.createElementNS(SVG_NS, 'marker');
+		marker.setAttribute('id', id);
+		marker.setAttribute('markerWidth', '4');
+		marker.setAttribute('markerHeight', '4');
+		marker.setAttribute('refX', '3');
+		marker.setAttribute('refY', '2');
+		marker.setAttribute('orient', 'auto');
+		const path = document.createElementNS(SVG_NS, 'path');
+		path.setAttribute('d', 'M0,0 L0,4 L4,2 z');
+		path.setAttribute('fill', color);
+		marker.appendChild(path);
+		return marker;
+	}
+
+	const arrowColors = [
+		['arrow-purple', '#b088ff'],
+		['arrow-cyan', '#00d4ff'],
+		['arrow-magenta', '#ff00cc'],
+		['arrow-yellow', '#ffe500'],
+		['arrow-red', '#ff2222']
+	] as const;
+
+	const colorToMarkerId: Record<string, string> = {};
+	for (const [id, color] of arrowColors) {
+		defs.appendChild(makeArrowMarker(id, color));
+		colorToMarkerId[color] = id;
+	}
+
 	svg.appendChild(defs);
 
 	const fillGroup = document.createElementNS(SVG_NS, 'g');
@@ -173,11 +211,18 @@ export async function initOverchess(
 	svg.appendChild(outlineGroup);
 	boardWrap.appendChild(svg);
 
+	// square name → SVG top-left corner (white's perspective)
 	function squareToXY(sq: string) {
 		return { x: sq.charCodeAt(0) - 97, y: 7 - (parseInt(sq[1]) - 1) };
 	}
+	// square name → center point
+	function squareCenter(sq: string) {
+		const { x, y } = squareToXY(sq);
+		return { cx: x + 0.5, cy: y + 0.5 };
+	}
 
-	// ------ attack calculations (unchanged logic) ------
+	// ---------------- Attack geometry ----------------
+	// Returns attacked squares. For sliding pieces also returns the endpoint of each ray.
 	function getPieceAttacks(type: string, color: 'w' | 'b', square: string): string[] {
 		const file = square.charCodeAt(0) - 97;
 		const rank = parseInt(square[1]) - 1;
@@ -268,6 +313,60 @@ export async function initOverchess(
 		return result;
 	}
 
+	// For arrows: sliding pieces return only the LAST square of each ray
+	function getSlidingRayEndpoints(type: string, color: 'w' | 'b', square: string): string[] {
+		const file = square.charCodeAt(0) - 97;
+		const rank = parseInt(square[1]) - 1;
+		const boardGrid = chess.board();
+		const endpoints: string[] = [];
+
+		const toSq = (f: number, r: number) => String.fromCharCode(97 + f) + (r + 1);
+		const inBounds = (f: number, r: number) => f >= 0 && f < 8 && r >= 0 && r < 8;
+		const pieceAt = (f: number, r: number) => boardGrid[7 - r]?.[f];
+
+		const slideEnd = (df: number, dr: number) => {
+			let f = file + df,
+				r = rank + dr,
+				last = '';
+			while (inBounds(f, r)) {
+				last = toSq(f, r);
+				if (pieceAt(f, r)) break;
+				f += df;
+				r += dr;
+			}
+			if (last) endpoints.push(last);
+		};
+
+		const dirs: Record<string, number[][]> = {
+			b: [
+				[-1, -1],
+				[-1, 1],
+				[1, -1],
+				[1, 1]
+			],
+			r: [
+				[-1, 0],
+				[1, 0],
+				[0, -1],
+				[0, 1]
+			],
+			q: [
+				[-1, -1],
+				[-1, 1],
+				[1, -1],
+				[1, 1],
+				[-1, 0],
+				[1, 0],
+				[0, -1],
+				[0, 1]
+			]
+		};
+		// only call for sliding pieces
+		if (dirs[type]) dirs[type].forEach(([df, dr]) => slideEnd(df, dr));
+		return endpoints;
+	}
+
+	// Map<square, { w: Set<pieceType>, b: Set<pieceType> }>
 	function getAttackerMap() {
 		const map = new Map<string, { w: Set<string>; b: Set<string> }>();
 		const ensure = (sq: string) => {
@@ -285,10 +384,70 @@ export async function initOverchess(
 		return map;
 	}
 
-	function updateOverlay() {
+	// ---------------- SVG helpers ----------------
+	function drawSquareOutline(x: number, y: number, color: string, inset: number) {
+		const rect = document.createElementNS(SVG_NS, 'rect');
+		rect.setAttribute('x', String(x + inset));
+		rect.setAttribute('y', String(y + inset));
+		rect.setAttribute('width', String(1 - inset * 2));
+		rect.setAttribute('height', String(1 - inset * 2));
+		rect.setAttribute('fill', 'none');
+		rect.setAttribute('stroke', color);
+		rect.setAttribute('stroke-width', '0.04');
+		outlineGroup.appendChild(rect);
+	}
+
+	function drawArrow(x1: number, y1: number, x2: number, y2: number, color: string) {
+		// shorten the line a bit so arrowhead doesn't overlap the target square edge
+		const markerId = colorToMarkerId[color] ?? 'arrow-red';
+		const line = document.createElementNS(SVG_NS, 'line');
+		line.setAttribute('x1', String(x1));
+		line.setAttribute('y1', String(y1));
+		line.setAttribute('x2', String(x2));
+		line.setAttribute('y2', String(y2));
+		line.setAttribute('stroke', color);
+		line.setAttribute('stroke-width', '0.06');
+		line.setAttribute('marker-end', `url(#${markerId})`);
+		line.setAttribute('stroke-linecap', 'round');
+		outlineGroup.appendChild(line);
+	}
+
+	function drawKnightCircle(sq: string, color: string) {
+		const { cx, cy } = squareCenter(sq);
+		const circle = document.createElementNS(SVG_NS, 'circle');
+		circle.setAttribute('cx', String(cx));
+		circle.setAttribute('cy', String(cy));
+		circle.setAttribute('r', '0.175');
+		circle.setAttribute('fill', 'none');
+		circle.setAttribute('stroke', color);
+		circle.setAttribute('stroke-width', '0.05');
+		outlineGroup.appendChild(circle);
+	}
+
+	function drawKingSquare(sq: string, color: string) {
+		const { cx, cy } = squareCenter(sq);
+		const size = 0.3;
+		const rect = document.createElementNS(SVG_NS, 'rect');
+		rect.setAttribute('x', String(cx - size / 2));
+		rect.setAttribute('y', String(cy - size / 2));
+		rect.setAttribute('width', String(size));
+		rect.setAttribute('height', String(size));
+		rect.setAttribute('fill', 'none');
+		rect.setAttribute('stroke', color);
+		rect.setAttribute('stroke-width', '0.05');
+		outlineGroup.appendChild(rect);
+	}
+
+	// ---------------- Render ----------------
+	let currentSettings: OverlaySettings = { ...defaultSettings };
+
+	function updateOverlay(settings: OverlaySettings) {
+		currentSettings = settings;
+
 		while (fillGroup.firstChild) fillGroup.removeChild(fillGroup.firstChild);
 		while (outlineGroup.firstChild) outlineGroup.removeChild(outlineGroup.firstChild);
 
+		// fills (always shown, independent of settings)
 		const wFill = new Set<string>();
 		const bFill = new Set<string>();
 		for (let f = 0; f < 8; f++) {
@@ -314,33 +473,64 @@ export async function initOverchess(
 			fillGroup.appendChild(rect);
 		}
 
-		const attackerMap = getAttackerMap();
-		for (const [sq, { w, b }] of attackerMap) {
-			const { x, y } = squareToXY(sq);
-			const attackers: Array<{ color: 'w' | 'b'; type: string }> = [
-				...[...w].map((t) => ({ color: 'w' as const, type: t })),
-				...[...b].map((t) => ({ color: 'b' as const, type: t }))
-			];
-			attackers.forEach(({ color, type }, i) => {
-				const inset = 0.04 + i * 0.07;
-				const strokeColor = color === 'b' ? '#ff2222' : PIECE_COLOR[type];
-				const rect = document.createElementNS(SVG_NS, 'rect');
-				rect.setAttribute('x', String(x + inset));
-				rect.setAttribute('y', String(y + inset));
-				rect.setAttribute('width', String(1 - inset * 2));
-				rect.setAttribute('height', String(1 - inset * 2));
-				rect.setAttribute('fill', 'none');
-				rect.setAttribute('stroke', PIECE_COLOR[type]);
-				rect.setAttribute('stroke-width', '0.04');
-				rect.setAttribute('stroke', strokeColor);
-				outlineGroup.appendChild(rect);
-			});
+		// outlines / arrows — filtered by settings.side
+		const showW = settings.side !== 'black';
+		const showB = settings.side !== 'white';
+
+		if (settings.style === 'squares') {
+			// ---- SQUARES MODE ----
+			const attackerMap = getAttackerMap();
+			for (const [sq, { w, b }] of attackerMap) {
+				const { x, y } = squareToXY(sq);
+				const attackers: Array<{ color: 'w' | 'b'; type: string }> = [
+					...(showW ? [...w].map((t) => ({ color: 'w' as const, type: t })) : []),
+					...(showB ? [...b].map((t) => ({ color: 'b' as const, type: t })) : [])
+				];
+				attackers.forEach(({ color, type }, i) => {
+					const inset = 0.04 + i * 0.07;
+					const strokeColor = color === 'b' ? BLACK_COLOR : PIECE_COLOR[type];
+					drawSquareOutline(x, y, strokeColor, inset);
+				});
+			}
+		} else {
+			// ---- ARROWS MODE ----
+			for (const row of chess.board()) {
+				for (const piece of row) {
+					if (!piece) continue;
+					const { color, type, square } = piece;
+					if (color === 'w' && !showW) continue;
+					if (color === 'b' && !showB) continue;
+
+					const strokeColor = color === 'b' ? BLACK_COLOR : PIECE_COLOR[type];
+					const { cx: px, cy: py } = squareCenter(square);
+
+					if (type === 'n') {
+						// knight → circle on each attacked square
+						for (const sq of getPieceAttacks(type, color, square)) {
+							drawKnightCircle(sq, strokeColor);
+						}
+					} else if (type === 'k') {
+						// king → small square marker on each attacked square
+						for (const sq of getPieceAttacks(type, color, square)) {
+							drawKingSquare(sq, strokeColor);
+						}
+					} else if (type === 'p') {
+						// pawn → short arrow to each diagonal
+						for (const sq of getPieceAttacks(type, color, square)) {
+							const { cx: tx, cy: ty } = squareCenter(sq);
+							drawArrow(px, py, tx, ty, strokeColor);
+						}
+					} else {
+						// sliding (b/r/q) → one arrow per ray to furthest square
+						for (const sq of getSlidingRayEndpoints(type, color, square)) {
+							const { cx: tx, cy: ty } = squareCenter(sq);
+							drawArrow(px, py, tx, ty, strokeColor);
+						}
+					}
+				}
+			}
 		}
 	}
 
-	return {
-		enableInput,
-		updateInfo,
-		updateOverlay
-	};
+	return { enableInput, updateInfo, updateOverlay };
 }

@@ -20,7 +20,9 @@ export default defineConfig(
   {
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     rules: {
-      'no-undef': 'off'
+      'no-undef': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'svelte/require-each-key': 'off'
     }
   },
   {
