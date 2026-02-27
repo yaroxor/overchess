@@ -6,7 +6,7 @@ export type OverlaySettings = {
 };
 
 export const defaultSettings: OverlaySettings = {
-	side: 'white',
+	side: 'white', // player is white, bot is black — show white by default
 	style: 'squares'
 };
 
@@ -385,16 +385,54 @@ export async function initOverchess(
 	}
 
 	// ---------------- SVG helpers ----------------
-	function drawSquareOutline(x: number, y: number, color: string, inset: number) {
-		const rect = document.createElementNS(SVG_NS, 'rect');
-		rect.setAttribute('x', String(x + inset));
-		rect.setAttribute('y', String(y + inset));
-		rect.setAttribute('width', String(1 - inset * 2));
-		rect.setAttribute('height', String(1 - inset * 2));
-		rect.setAttribute('fill', 'none');
-		rect.setAttribute('stroke', color);
-		rect.setAttribute('stroke-width', '0.04');
-		outlineGroup.appendChild(rect);
+
+	// Single outline with multi-color dashes — one overlapping rect per color,
+	// offset so colors alternate evenly around the perimeter
+	function drawMultiColorOutline(x: number, y: number, colors: string[]) {
+		const inset = 0.05;
+		const segLen = 0.15;
+		colors.forEach((color, i) => {
+			const rect = document.createElementNS(SVG_NS, 'rect');
+			rect.setAttribute('x', String(x + inset));
+			rect.setAttribute('y', String(y + inset));
+			rect.setAttribute('width', String(1 - inset * 2));
+			rect.setAttribute('height', String(1 - inset * 2));
+			rect.setAttribute('fill', 'none');
+			rect.setAttribute('stroke', color);
+			rect.setAttribute('stroke-width', '0.055');
+			rect.setAttribute('stroke-dasharray', `${segLen} ${(colors.length - 1) * segLen}`);
+			rect.setAttribute('stroke-dashoffset', String(-i * segLen));
+			outlineGroup.appendChild(rect);
+		});
+	}
+
+	function drawBadge(
+		x: number,
+		y: number,
+		count: number,
+		bg: string,
+		fg: string,
+		corner: 'tl' | 'tr'
+	) {
+		const r = 0.16;
+		const cx = corner === 'tl' ? x + r + 0.04 : x + 1 - r - 0.04;
+		const cy = y + r + 0.04;
+		const circle = document.createElementNS(SVG_NS, 'circle');
+		circle.setAttribute('cx', String(cx));
+		circle.setAttribute('cy', String(cy));
+		circle.setAttribute('r', String(r));
+		circle.setAttribute('fill', bg);
+		outlineGroup.appendChild(circle);
+		const text = document.createElementNS(SVG_NS, 'text');
+		text.setAttribute('x', String(cx));
+		text.setAttribute('y', String(cy));
+		text.setAttribute('text-anchor', 'middle');
+		text.setAttribute('dominant-baseline', 'central');
+		text.setAttribute('font-size', '0.22');
+		text.setAttribute('font-weight', 'bold');
+		text.setAttribute('fill', fg);
+		text.textContent = String(count);
+		outlineGroup.appendChild(text);
 	}
 
 	function drawArrow(x1: number, y1: number, x2: number, y2: number, color: string) {
@@ -473,24 +511,27 @@ export async function initOverchess(
 			fillGroup.appendChild(rect);
 		}
 
-		// outlines / arrows — filtered by settings.side
+		// outlines / arrows
+		// black's red outline always shown; side setting only gates white's colored outlines
 		const showW = settings.side !== 'black';
-		const showB = settings.side !== 'white';
 
 		if (settings.style === 'squares') {
 			// ---- SQUARES MODE ----
 			const attackerMap = getAttackerMap();
 			for (const [sq, { w, b }] of attackerMap) {
 				const { x, y } = squareToXY(sq);
-				const attackers: Array<{ color: 'w' | 'b'; type: string }> = [
-					...(showW ? [...w].map((t) => ({ color: 'w' as const, type: t })) : []),
-					...(showB ? [...b].map((t) => ({ color: 'b' as const, type: t })) : [])
+
+				// collect colors: white piece types (if shown) + red for any black attackers
+				const colors: string[] = [
+					...(showW ? [...w].map((t) => PIECE_COLOR[t]) : []),
+					...(b.size > 0 ? [BLACK_COLOR] : [])
 				];
-				attackers.forEach(({ color, type }, i) => {
-					const inset = 0.04 + i * 0.07;
-					const strokeColor = color === 'b' ? BLACK_COLOR : PIECE_COLOR[type];
-					drawSquareOutline(x, y, strokeColor, inset);
-				});
+				// deduplicate (e.g. knight+bishop both cyan → one cyan segment)
+				const uniqueColors = [...new Set(colors)];
+				if (uniqueColors.length > 0) drawMultiColorOutline(x, y, uniqueColors);
+
+				if (showW && w.size > 0) drawBadge(x, y, w.size, '#ffffff', '#111111', 'tl');
+				if (b.size > 0) drawBadge(x, y, b.size, '#111111', '#ffffff', 'tr');
 			}
 		} else {
 			// ---- ARROWS MODE ----
@@ -499,7 +540,7 @@ export async function initOverchess(
 					if (!piece) continue;
 					const { color, type, square } = piece;
 					if (color === 'w' && !showW) continue;
-					if (color === 'b' && !showB) continue;
+					// black arrows always shown
 
 					const strokeColor = color === 'b' ? BLACK_COLOR : PIECE_COLOR[type];
 					const { cx: px, cy: py } = squareCenter(square);
