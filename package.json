@@ -13,7 +13,8 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run"
+		"test": "npm run test:unit -- --run",
+		"prepare": "lefthook install && svelte-kit sync || echo ''"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.2",
@@ -27,6 +28,8 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.14.0",
 		"globals": "^17.3.0",
+		"lefthook": "^2.1.1",
+		"lint-staged": "^16.2.7",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.4.1",
 		"prettier-plugin-tailwindcss": "^0.7.2",

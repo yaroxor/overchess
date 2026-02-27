@@ -1,0 +1,13 @@
+pre-commit:
+  parallel: false
+  commands:
+    format:
+      run: bun prettier --write {staged_files}
+      glob: "*.{ts,svelte,css,json}"
+    lint:
+      run: bun eslint --fix {staged_files}
+      glob: "*.{ts,svelte}"
+    typecheck:
+      run: bun run check
+    staged-again:
+      run: git add {staged_files}
