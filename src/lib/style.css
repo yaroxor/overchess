@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+.cm-chessboard.black-and-white .board .square.white {
+  fill: #e1e1e1;
+}
+.cm-chessboard.black-and-white .board .square.black {
+  fill: #999999;
+}
