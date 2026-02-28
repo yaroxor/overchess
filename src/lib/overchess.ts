@@ -144,7 +144,7 @@ export async function initOverchess(
 		q: '#ff00cc',
 		k: '#ffe500' // yellow
 	};
-	const BLACK_COLOR = '#ff2222';
+	const BLACK_COLOR = '#b5412d';
 
 	const boardWrap = boardEl;
 	boardWrap.style.position = 'relative';
@@ -404,7 +404,7 @@ export async function initOverchess(
 			rect.setAttribute('height', String(1 - inset * 2));
 			rect.setAttribute('fill', 'none');
 			rect.setAttribute('stroke', color);
-			rect.setAttribute('stroke-width', '0.055');
+			rect.setAttribute('stroke-width', '0.04');
 			rect.setAttribute('stroke-dasharray', `${segLen} ${(colors.length - 1) * segLen}`);
 			rect.setAttribute('stroke-dashoffset', String(-i * segLen));
 			outlineGroup.appendChild(rect);
@@ -511,7 +511,7 @@ export async function initOverchess(
 				inB = bFill.has(sq);
 			rect.setAttribute(
 				'fill',
-				inW && inB ? 'url(#hatch-both)' : inW ? 'rgba(80,200,80,0.35)' : 'rgba(220,60,60,0.35)'
+				inW && inB ? 'url(#hatch-both)' : inW ? 'rgba(80,200,80,0.35)' : 'rgba(220,0,0,0.35)'
 			);
 			fillGroup.appendChild(rect);
 		}
