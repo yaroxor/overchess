@@ -527,8 +527,10 @@ export async function initOverchess(
 				const uniqueColors = [...new Set(colors)];
 				if (uniqueColors.length > 0) drawMultiColorOutline(x, y, uniqueColors);
 
-				if (showW && w.size > 0) drawBadge(x, y, w.size, '#ffffff', '#111111', 'tl');
-				if (b.size > 0) drawBadge(x, y, b.size, '#111111', '#ffffff', 'tr');
+				if (w.size > 0 && b.size > 0) {
+					if (showW) drawBadge(x, y, w.size, '#ffffff', '#111111', 'tl');
+					drawBadge(x, y, b.size, '#111111', '#ffffff', 'tr');
+				}
 			}
 		} else {
 			for (const row of chess.board()) {
