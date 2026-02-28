@@ -28,7 +28,8 @@
 				<div class="flex gap-2">
 					{#each ['white', 'black', 'both'] as side}
 						<button
-							onclick={() => (settings.side = side as OverlaySettings['side'])}
+							onclick={() => {}}
+							// onclick={() => (settings.side = side as OverlaySettings['side'])}
 							class="flex-1 rounded border py-1 text-sm font-semibold transition-colors
                    {settings.side === side
 								? 'border-white bg-white/20 text-white'

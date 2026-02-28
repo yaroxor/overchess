@@ -4,6 +4,7 @@
 	import '$lib/style.css';
 	import 'cm-chessboard/assets/chessboard.css';
 	import 'cm-chessboard/assets/extensions/markers/markers.css';
+	import 'cm-chessboard/assets/extensions/arrows/arrows.css';
 
 	import Legend from './Legend.svelte';
 	import Settings from './Settings.svelte';
@@ -22,6 +23,7 @@
 	// re-render overlay whenever settings change
 	$effect(() => {
 		if (api) api.updateOverlay(settings);
+		console.log('settings changed', settings.style); // magic logging; DO NOT TOUCH
 	});
 
 	onMount(async () => {

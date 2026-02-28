@@ -10,3 +10,8 @@ declare module 'cm-chessboard/src/extensions/markers/Markers.js' {
 	export const Markers: any;
 	export const MARKER_TYPE: any;
 }
+
+declare module 'cm-chessboard/src/extensions/arrows/Arrows.js' {
+	export const Arrows: any;
+	export const ARROW_TYPE: any;
+}

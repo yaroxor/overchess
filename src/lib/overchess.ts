@@ -23,6 +23,7 @@ export async function initOverchess(
 	const { Chess } = await import('chess.js');
 	const { Chessboard, COLOR, INPUT_EVENT_TYPE, FEN } = await import('cm-chessboard');
 	const { Markers, MARKER_TYPE } = await import('cm-chessboard/src/extensions/markers/Markers.js');
+	const { Arrows } = await import('cm-chessboard/src/extensions/arrows/Arrows.js');
 
 	// ---------------- Stockfish ----------------
 	const worker = new Worker('/stockfish-18-lite-single.js');
@@ -36,7 +37,7 @@ export async function initOverchess(
 		position: FEN.start,
 		assetsUrl: '/cm-chessboard/assets/',
 		style: { cssClass: 'black-and-white', showCoordinates: false },
-		extensions: [{ class: Markers, props: { autoMarkers: MARKER_TYPE.frame } }]
+		extensions: [{ class: Markers, props: { autoMarkers: MARKER_TYPE.frame } }, { class: Arrows }]
 	});
 
 	worker.addEventListener('message', (e: MessageEvent<string>) => {
@@ -142,6 +143,16 @@ export async function initOverchess(
 		k: '#ffe500'
 	};
 	const BLACK_COLOR = '#b5412d';
+
+	const PIECE_ARROW_TYPE: Record<string, { class: string }> = {
+		p: { class: 'arrow-purple' },
+		n: { class: 'arrow-cyan' },
+		b: { class: 'arrow-cyan' },
+		r: { class: 'arrow-magenta' },
+		q: { class: 'arrow-magenta' },
+		k: { class: 'arrow-yellow' }
+	};
+	const BLACK_ARROW_TYPE = { class: 'arrow-brown' };
 
 	boardEl.style.position = 'relative';
 
@@ -447,41 +458,33 @@ export async function initOverchess(
 		outlineGroup.appendChild(text);
 	}
 
-	function drawArrow(x1: number, y1: number, x2: number, y2: number, color: string) {
-		const markerId = colorToMarkerId[color] ?? 'arrow-brown';
-		const line = document.createElementNS(SVG_NS, 'line');
-		line.setAttribute('x1', String(x1));
-		line.setAttribute('y1', String(y1));
-		line.setAttribute('x2', String(x2));
-		line.setAttribute('y2', String(y2));
-		line.setAttribute('stroke', color);
-		line.setAttribute('stroke-width', '0.06');
-		line.setAttribute('marker-end', `url(#${markerId})`);
-		line.setAttribute('stroke-linecap', 'round');
-		outlineGroup.appendChild(line);
-	}
-
 	function drawKnightCircle(sq: string, color: string) {
 		const { cx, cy } = squareCenter(sq);
 		const circle = document.createElementNS(SVG_NS, 'circle');
 		circle.setAttribute('cx', String(cx));
 		circle.setAttribute('cy', String(cy));
-		circle.setAttribute('r', '0.175');
-		circle.setAttribute('fill', 'none');
+		circle.setAttribute('r', '0.22');
+		circle.setAttribute('fill', color);
+		circle.setAttribute('opacity', '0.5');
 		circle.setAttribute('stroke', color);
 		circle.setAttribute('stroke-width', '0.05');
 		outlineGroup.appendChild(circle);
 	}
 
-	function drawKingSquare(sq: string, color: string) {
-		const { cx, cy } = squareCenter(sq);
-		const size = 0.3;
+	function drawKingSquare(kingSquare: string, color: string) {
+		const { x, y } = squareToXY(kingSquare);
+		// 3x3 around king, clamped to board
+		const x0 = Math.max(0, x - 1);
+		const y0 = Math.max(0, y - 1);
+		const x1 = Math.min(8, x + 2);
+		const y1 = Math.min(8, y + 2);
 		const rect = document.createElementNS(SVG_NS, 'rect');
-		rect.setAttribute('x', String(cx - size / 2));
-		rect.setAttribute('y', String(cy - size / 2));
-		rect.setAttribute('width', String(size));
-		rect.setAttribute('height', String(size));
+		rect.setAttribute('x', String(x0));
+		rect.setAttribute('y', String(y0));
+		rect.setAttribute('width', String(x1 - x0));
+		rect.setAttribute('height', String(y1 - y0));
 		rect.setAttribute('fill', 'none');
+		rect.setAttribute('opacity', '0.6');
 		rect.setAttribute('stroke', color);
 		rect.setAttribute('stroke-width', '0.05');
 		outlineGroup.appendChild(rect);
@@ -519,6 +522,7 @@ export async function initOverchess(
 		const showW = settings.side !== 'black';
 
 		if (settings.style === 'squares') {
+			board.removeArrows();
 			for (const [sq, { w, b }] of attackerMap) {
 				const { x, y } = squareToXY(sq);
 				const colors: string[] = [
@@ -534,6 +538,7 @@ export async function initOverchess(
 				}
 			}
 		} else {
+			board.removeArrows();
 			for (const row of chess.board()) {
 				for (const piece of row) {
 					if (!piece) continue;
@@ -541,24 +546,20 @@ export async function initOverchess(
 					const { color, type, square } = piece;
 					if (color === 'w' && !showW) continue;
 
+					const arrowType = color === 'b' ? BLACK_ARROW_TYPE : PIECE_ARROW_TYPE[type];
 					const strokeColor = color === 'b' ? BLACK_COLOR : PIECE_COLOR[type];
-					const { cx: px, cy: py } = squareCenter(square);
 
 					if (type === 'n') {
 						for (const sq of getPieceAttacks(type, color, square))
 							drawKnightCircle(sq, strokeColor);
 					} else if (type === 'k') {
-						for (const sq of getPieceAttacks(type, color, square)) drawKingSquare(sq, strokeColor);
+						drawKingSquare(square, strokeColor);
 					} else if (type === 'p') {
-						for (const sq of getPieceAttacks(type, color, square)) {
-							const { cx: tx, cy: ty } = squareCenter(sq);
-							drawArrow(px, py, tx, ty, strokeColor);
-						}
+						for (const sq of getPieceAttacks(type, color, square))
+							board.addArrow(arrowType, square, sq);
 					} else {
-						for (const sq of getSlidingRayEndpoints(type, color, square)) {
-							const { cx: tx, cy: ty } = squareCenter(sq);
-							drawArrow(px, py, tx, ty, strokeColor);
-						}
+						for (const sq of getSlidingRayEndpoints(type, color, square))
+							board.addArrow(arrowType, square, sq);
 					}
 				}
 			}

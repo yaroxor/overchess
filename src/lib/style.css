@@ -1,8 +1,62 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 .cm-chessboard.black-and-white .board .square.white {
-  fill: #e1e1e1;
+	fill: #e1e1e1;
 }
 .cm-chessboard.black-and-white .board .square.black {
-  fill: #999999;
+	fill: #999999;
+}
+
+.cm-chessboard .arrow-line {
+	stroke-width: 10px !important;
+}
+
+.cm-chessboard .arrow-purple .arrow-head {
+	fill: #b088ff;
+	fill-rule: nonzero;
+}
+.cm-chessboard .arrow-purple .arrow-line {
+	stroke: #b088ff;
+	stroke-linecap: round;
+	opacity: 0.7;
+}
+
+.cm-chessboard .arrow-cyan .arrow-head {
+	fill: #00d4ff;
+	fill-rule: nonzero;
+}
+.cm-chessboard .arrow-cyan .arrow-line {
+	stroke: #00d4ff;
+	stroke-linecap: round;
+	opacity: 0.7;
+}
+
+.cm-chessboard .arrow-magenta .arrow-head {
+	fill: #ff00cc;
+	fill-rule: nonzero;
+}
+.cm-chessboard .arrow-magenta .arrow-line {
+	stroke: #ff00cc;
+	stroke-linecap: round;
+	opacity: 0.7;
+}
+
+.cm-chessboard .arrow-yellow .arrow-head {
+	fill: #ffe500;
+	fill-rule: nonzero;
+}
+.cm-chessboard .arrow-yellow .arrow-line {
+	stroke: #ffe500;
+	stroke-linecap: round;
+	opacity: 0.7;
+}
+
+.cm-chessboard .arrow-brown .arrow-head {
+	fill: #b5412d;
+	fill-rule: nonzero;
+}
+.cm-chessboard .arrow-brown .arrow-line {
+	stroke: #b5412d;
+	stroke-linecap: round;
+	opacity: 0.7;
 }
