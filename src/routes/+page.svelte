@@ -8,8 +8,8 @@
 	import Legend from './Legend.svelte';
 	import Settings from './Settings.svelte';
 
-	import type { OverchessApi, OverlaySettings } from './overchess';
-	import { defaultSettings } from './overchess';
+	import type { OverchessApi, OverlaySettings } from '$lib/overchess';
+	import { defaultSettings } from '$lib/overchess';
 
 	let boardHost: HTMLDivElement;
 	let turnEl: HTMLSpanElement;
@@ -24,7 +24,7 @@
 	});
 
 	onMount(async () => {
-		const mod = await import('./overchess');
+		const mod = await import('$lib/overchess');
 		api = await mod.initOverchess(boardHost, turnEl, statusEl);
 		api.enableInput();
 		api.updateInfo();

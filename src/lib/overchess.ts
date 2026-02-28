@@ -13,7 +13,7 @@ export const defaultSettings: OverlaySettings = {
 export type OverchessApi = {
 	enableInput: () => void;
 	updateInfo: () => void;
-	updateOverlay: (settings: OverlaySettings) => void;
+	updateOverlay: (settings: OverlaySettings, excludeSquare?: string) => void;
 };
 
 export async function initOverchess(
@@ -59,7 +59,7 @@ export async function initOverchess(
 	function applyStockfishMove(uciMove: string) {
 		const from = uciMove.slice(0, 2);
 		const to = uciMove.slice(2, 4);
-		 
+
 		const promotion = (uciMove[4] as any) ?? undefined;
 		try {
 			chess.move({ from, to, promotion });
@@ -96,13 +96,17 @@ export async function initOverchess(
 		switch (event.type) {
 			case INPUT_EVENT_TYPE.moveInputStarted: {
 				board.removeLegalMovesMarkers();
-				 
+
 				const moves = chess.moves({ square: event.squareFrom as any, verbose: true });
-				 
+
 				board.addLegalMovesMarkers(moves.map((m: any) => ({ to: m.to, capture: !!m.captured })));
+
+				updateOverlay(currentSettings, event.squareFrom);
+
 				return moves.length > 0;
 			}
 			case INPUT_EVENT_TYPE.validateMoveInput: {
+				updateOverlay(currentSettings);
 				board.removeLegalMovesMarkers();
 				try {
 					const result = chess.move({ from: event.squareFrom, to: event.squareTo, promotion: 'q' });
@@ -120,6 +124,7 @@ export async function initOverchess(
 				}
 			}
 			case INPUT_EVENT_TYPE.moveInputCanceled:
+				updateOverlay(currentSettings);
 				board.removeLegalMovesMarkers();
 				break;
 		}
@@ -366,8 +371,7 @@ export async function initOverchess(
 		return endpoints;
 	}
 
-	// Map<square, { w: Set<pieceType>, b: Set<pieceType> }>
-	function getAttackerMap() {
+	function getAttackerMap(excludeSquare?: string) {
 		const map = new Map<string, { w: Set<string>; b: Set<string> }>();
 		const ensure = (sq: string) => {
 			if (!map.has(sq)) map.set(sq, { w: new Set(), b: new Set() });
@@ -376,6 +380,7 @@ export async function initOverchess(
 		for (const row of chess.board()) {
 			for (const piece of row) {
 				if (!piece) continue;
+				if (piece.square === excludeSquare) continue; // skip lifted piece
 				for (const sq of getPieceAttacks(piece.type, piece.color, piece.square)) {
 					ensure(sq)[piece.color].add(piece.type);
 				}
@@ -479,7 +484,7 @@ export async function initOverchess(
 	// ---------------- Render ----------------
 	let currentSettings: OverlaySettings = { ...defaultSettings };
 
-	function updateOverlay(settings: OverlaySettings) {
+	function updateOverlay(settings: OverlaySettings, excludeSquare?: string) {
 		currentSettings = settings;
 
 		while (fillGroup.firstChild) fillGroup.removeChild(fillGroup.firstChild);
@@ -517,7 +522,7 @@ export async function initOverchess(
 
 		if (settings.style === 'squares') {
 			// ---- SQUARES MODE ----
-			const attackerMap = getAttackerMap();
+			const attackerMap = getAttackerMap(excludeSquare);
 			for (const [sq, { w, b }] of attackerMap) {
 				const { x, y } = squareToXY(sq);
 

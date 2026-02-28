@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { OverlaySettings } from './overchess';
+	import type { OverlaySettings } from '$lib/overchess';
 
 	let { settings = $bindable() }: { settings: OverlaySettings } = $props();
 	let showSettings = $state(false);
