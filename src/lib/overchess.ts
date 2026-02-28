@@ -12,6 +12,7 @@ export type OverchessApi = {
 	enableInput: () => void;
 	updateInfo: () => void;
 	updateOverlay: (settings: OverlaySettings, excludeSquare?: string) => void;
+	restart: () => void;
 };
 
 export async function initOverchess(
@@ -564,5 +565,14 @@ export async function initOverchess(
 		}
 	}
 
-	return { enableInput, updateInfo, updateOverlay };
+	function restart() {
+		chess.reset();
+		board.setPosition(FEN.start, true);
+		worker.postMessage('ucinewgame');
+		updateInfo();
+		updateOverlay(currentSettings);
+		enableInput();
+	}
+
+	return { enableInput, updateInfo, updateOverlay, restart };
 }

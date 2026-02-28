@@ -7,6 +7,7 @@
 
 	import Legend from './Legend.svelte';
 	import Settings from './Settings.svelte';
+	import Restart from './Restart.svelte';
 
 	import type { OverchessApi, OverlaySettings } from '$lib/overchess';
 	import { defaultSettings } from '$lib/overchess';
@@ -34,6 +35,7 @@
 
 <Legend />
 <Settings bind:settings />
+<Restart onRestart={() => api?.restart()} />
 
 <div class="flex min-h-screen items-center justify-center bg-[#1a1a2e] text-gray-200">
 	<div class="flex items-start gap-4">
