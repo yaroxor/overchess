@@ -1,12 +1,10 @@
-import type { Square } from 'chess.js';
-
 export type OverlaySettings = {
 	side: 'white' | 'black' | 'both';
 	style: 'squares' | 'arrows';
 };
 
 export const defaultSettings: OverlaySettings = {
-	side: 'white', // player is white, bot is black — show white by default
+	side: 'white',
 	style: 'squares'
 };
 
@@ -96,13 +94,13 @@ export async function initOverchess(
 		switch (event.type) {
 			case INPUT_EVENT_TYPE.moveInputStarted: {
 				board.removeLegalMovesMarkers();
-				const moves = chess.moves({ square: event.squareFrom as any, verbose: true });
-				board.addLegalMovesMarkers(moves.map((m: any) => ({ to: m.to, capture: !!m.captured })));
 
+				const moves = chess.moves({ square: event.squareFrom as any, verbose: true });
+
+				board.addLegalMovesMarkers(moves.map((m: any) => ({ to: m.to, capture: !!m.captured })));
 				if (moves.length > 0) {
 					updateOverlay(currentSettings, event.squareFrom);
 				}
-
 				return moves.length > 0;
 			}
 			case INPUT_EVENT_TYPE.validateMoveInput: {
@@ -133,29 +131,33 @@ export async function initOverchess(
 
 	// ---------------- Overlay ----------------
 	const SVG_NS = 'http://www.w3.org/2000/svg';
-	const FILES = 'abcdefgh';
 
-	// white pieces get distinct colors, black pieces all get red
 	const PIECE_COLOR: Record<string, string> = {
-		p: '#b088ff', // soft purple
-		n: '#00d4ff', // cyan (shared with bishop)
+		p: '#b088ff',
+		n: '#00d4ff',
 		b: '#00d4ff',
-		r: '#ff00cc', // magenta (shared with queen)
+		r: '#ff00cc',
 		q: '#ff00cc',
-		k: '#ffe500' // yellow
+		k: '#ffe500'
 	};
 	const BLACK_COLOR = '#b5412d';
 
-	const boardWrap = boardEl;
-	boardWrap.style.position = 'relative';
+	boardEl.style.position = 'relative';
 
-	const svg = document.createElementNS(SVG_NS, 'svg');
-	svg.setAttribute('viewBox', '0 0 8 8');
-	svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+	// ---------------- Two SVG layers ----------------
+	// fillGroup → injected INTO cm-chessboard's SVG, after the board squares, UNDER pieces
+	// outlineGroup → our own SVG on top of everything (outlines, badges, arrows)
+
+	const fillGroup = document.createElementNS(SVG_NS, 'g');
+	fillGroup.setAttribute('class', 'overlay-fills');
+
+	// Our top SVG — outlines and badges only
+	const topSvg = document.createElementNS(SVG_NS, 'svg');
+	topSvg.setAttribute('viewBox', '0 0 8 8');
+	topSvg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
 
 	const defs = document.createElementNS(SVG_NS, 'defs');
 
-	// hatch pattern for contested squares
 	function makeHatch(id: string, c1: string, c2: string) {
 		const pat = document.createElementNS(SVG_NS, 'pattern');
 		pat.setAttribute('id', id);
@@ -178,7 +180,6 @@ export async function initOverchess(
 	}
 	defs.appendChild(makeHatch('hatch-both', 'rgba(80,200,80,0.45)', 'rgba(220,60,60,0.45)'));
 
-	// arrowhead markers — one per unique color
 	function makeArrowMarker(id: string, color: string) {
 		const marker = document.createElementNS(SVG_NS, 'marker');
 		marker.setAttribute('id', id);
@@ -199,7 +200,7 @@ export async function initOverchess(
 		['arrow-cyan', '#00d4ff'],
 		['arrow-magenta', '#ff00cc'],
 		['arrow-yellow', '#ffe500'],
-		['arrow-red', '#ff2222']
+		['arrow-brown', '#b5412d']
 	] as const;
 
 	const colorToMarkerId: Record<string, string> = {};
@@ -208,26 +209,37 @@ export async function initOverchess(
 		colorToMarkerId[color] = id;
 	}
 
-	svg.appendChild(defs);
-
-	const fillGroup = document.createElementNS(SVG_NS, 'g');
+	topSvg.appendChild(defs);
 	const outlineGroup = document.createElementNS(SVG_NS, 'g');
-	svg.appendChild(fillGroup);
-	svg.appendChild(outlineGroup);
-	boardWrap.appendChild(svg);
+	topSvg.appendChild(outlineGroup);
+	boardEl.appendChild(topSvg);
 
-	// square name → SVG top-left corner (white's perspective)
+	// Inject fillGroup into cm-chessboard's own SVG, right after the board squares group
+	// This puts fills UNDER pieces automatically since pieces-layer comes after in the SVG
+	const boardSvg = boardEl.querySelector('svg');
+	const boardGroup = boardSvg?.querySelector('g.board');
+	if (boardSvg && boardGroup) {
+		// fillGroup needs its own viewBox-aware coordinate system
+		// cm-chessboard uses pixel coords, so we use a nested SVG with our 0-8 viewBox
+		const fillSvg = document.createElementNS(SVG_NS, 'svg');
+		fillSvg.setAttribute('width', '100%');
+		fillSvg.setAttribute('height', '100%');
+		fillSvg.setAttribute('viewBox', '0 0 8 8');
+		fillSvg.style.pointerEvents = 'none';
+		fillSvg.appendChild(fillGroup);
+		boardSvg.insertBefore(fillSvg, boardGroup.nextSibling);
+	}
+
+	// ---------------- Coordinate helpers ----------------
 	function squareToXY(sq: string) {
 		return { x: sq.charCodeAt(0) - 97, y: 7 - (parseInt(sq[1]) - 1) };
 	}
-	// square name → center point
 	function squareCenter(sq: string) {
 		const { x, y } = squareToXY(sq);
 		return { cx: x + 0.5, cy: y + 0.5 };
 	}
 
 	// ---------------- Attack geometry ----------------
-	// Returns attacked squares. For sliding pieces also returns the endpoint of each ray.
 	function getPieceAttacks(type: string, color: 'w' | 'b', square: string): string[] {
 		const file = square.charCodeAt(0) - 97;
 		const rank = parseInt(square[1]) - 1;
@@ -243,7 +255,6 @@ export async function initOverchess(
 				r = rank + dr;
 			if (inBounds(f, r)) result.push(toSq(f, r));
 		};
-
 		const slide = (df: number, dr: number) => {
 			let f = file + df,
 				r = rank + dr;
@@ -318,7 +329,6 @@ export async function initOverchess(
 		return result;
 	}
 
-	// For arrows: sliding pieces return only the LAST square of each ray
 	function getSlidingRayEndpoints(type: string, color: 'w' | 'b', square: string): string[] {
 		const file = square.charCodeAt(0) - 97;
 		const rank = parseInt(square[1]) - 1;
@@ -366,7 +376,6 @@ export async function initOverchess(
 				[0, 1]
 			]
 		};
-		// only call for sliding pieces
 		if (dirs[type]) dirs[type].forEach(([df, dr]) => slideEnd(df, dr));
 		return endpoints;
 	}
@@ -380,7 +389,7 @@ export async function initOverchess(
 		for (const row of chess.board()) {
 			for (const piece of row) {
 				if (!piece) continue;
-				if (piece.square === excludeSquare) continue; // skip lifted piece
+				if (piece.square === excludeSquare) continue;
 				for (const sq of getPieceAttacks(piece.type, piece.color, piece.square)) {
 					ensure(sq)[piece.color].add(piece.type);
 				}
@@ -389,10 +398,7 @@ export async function initOverchess(
 		return map;
 	}
 
-	// ---------------- SVG helpers ----------------
-
-	// Single outline with multi-color dashes — one overlapping rect per color,
-	// offset so colors alternate evenly around the perimeter
+	// ---------------- SVG draw helpers ----------------
 	function drawMultiColorOutline(x: number, y: number, colors: string[]) {
 		const inset = 0.05;
 		const segLen = 0.15;
@@ -441,8 +447,7 @@ export async function initOverchess(
 	}
 
 	function drawArrow(x1: number, y1: number, x2: number, y2: number, color: string) {
-		// shorten the line a bit so arrowhead doesn't overlap the target square edge
-		const markerId = colorToMarkerId[color] ?? 'arrow-red';
+		const markerId = colorToMarkerId[color] ?? 'arrow-brown';
 		const line = document.createElementNS(SVG_NS, 'line');
 		line.setAttribute('x1', String(x1));
 		line.setAttribute('y1', String(y1));
@@ -490,48 +495,35 @@ export async function initOverchess(
 		while (fillGroup.firstChild) fillGroup.removeChild(fillGroup.firstChild);
 		while (outlineGroup.firstChild) outlineGroup.removeChild(outlineGroup.firstChild);
 
-		// fills (always shown, independent of settings)
-		const wFill = new Set<string>();
-		const bFill = new Set<string>();
-		for (let f = 0; f < 8; f++) {
-			for (let r = 1; r <= 8; r++) {
-				const sq = (FILES[f] + r) as Square;
-				if (chess.isAttacked(sq, 'w')) wFill.add(sq);
-				if (chess.isAttacked(sq, 'b')) bFill.add(sq);
-			}
-		}
-		for (const sq of new Set([...wFill, ...bFill])) {
+		const attackerMap = getAttackerMap(excludeSquare);
+
+		// fills — drawn into cm-chessboard's SVG, under pieces
+		for (const [sq, { w, b }] of attackerMap) {
+			const inW = w.size > 0,
+				inB = b.size > 0;
+			if (!inW && !inB) continue;
 			const { x, y } = squareToXY(sq);
 			const rect = document.createElementNS(SVG_NS, 'rect');
 			rect.setAttribute('x', String(x));
 			rect.setAttribute('y', String(y));
 			rect.setAttribute('width', '1');
 			rect.setAttribute('height', '1');
-			const inW = wFill.has(sq),
-				inB = bFill.has(sq);
 			rect.setAttribute(
 				'fill',
-				inW && inB ? 'url(#hatch-both)' : inW ? 'rgba(80,200,80,0.35)' : 'rgba(220,0,0,0.35)'
+				inW && inB ? 'url(#hatch-both)' : inW ? 'rgba(80,200,80,0.35)' : 'rgba(220,60,60,0.35)'
 			);
 			fillGroup.appendChild(rect);
 		}
 
-		// outlines / arrows
-		// black's red outline always shown; side setting only gates white's colored outlines
 		const showW = settings.side !== 'black';
 
 		if (settings.style === 'squares') {
-			// ---- SQUARES MODE ----
-			const attackerMap = getAttackerMap(excludeSquare);
 			for (const [sq, { w, b }] of attackerMap) {
 				const { x, y } = squareToXY(sq);
-
-				// collect colors: white piece types (if shown) + red for any black attackers
 				const colors: string[] = [
 					...(showW ? [...w].map((t) => PIECE_COLOR[t]) : []),
 					...(b.size > 0 ? [BLACK_COLOR] : [])
 				];
-				// deduplicate (e.g. knight+bishop both cyan → one cyan segment)
 				const uniqueColors = [...new Set(colors)];
 				if (uniqueColors.length > 0) drawMultiColorOutline(x, y, uniqueColors);
 
@@ -539,35 +531,27 @@ export async function initOverchess(
 				if (b.size > 0) drawBadge(x, y, b.size, '#111111', '#ffffff', 'tr');
 			}
 		} else {
-			// ---- ARROWS MODE ----
 			for (const row of chess.board()) {
 				for (const piece of row) {
 					if (!piece) continue;
+					if (piece.square === excludeSquare) continue;
 					const { color, type, square } = piece;
 					if (color === 'w' && !showW) continue;
-					// black arrows always shown
 
 					const strokeColor = color === 'b' ? BLACK_COLOR : PIECE_COLOR[type];
 					const { cx: px, cy: py } = squareCenter(square);
 
 					if (type === 'n') {
-						// knight → circle on each attacked square
-						for (const sq of getPieceAttacks(type, color, square)) {
+						for (const sq of getPieceAttacks(type, color, square))
 							drawKnightCircle(sq, strokeColor);
-						}
 					} else if (type === 'k') {
-						// king → small square marker on each attacked square
-						for (const sq of getPieceAttacks(type, color, square)) {
-							drawKingSquare(sq, strokeColor);
-						}
+						for (const sq of getPieceAttacks(type, color, square)) drawKingSquare(sq, strokeColor);
 					} else if (type === 'p') {
-						// pawn → short arrow to each diagonal
 						for (const sq of getPieceAttacks(type, color, square)) {
 							const { cx: tx, cy: ty } = squareCenter(sq);
 							drawArrow(px, py, tx, ty, strokeColor);
 						}
 					} else {
-						// sliding (b/r/q) → one arrow per ray to furthest square
 						for (const sq of getSlidingRayEndpoints(type, color, square)) {
 							const { cx: tx, cy: ty } = squareCenter(sq);
 							drawArrow(px, py, tx, ty, strokeColor);
