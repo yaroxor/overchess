@@ -96,18 +96,18 @@ export async function initOverchess(
 		switch (event.type) {
 			case INPUT_EVENT_TYPE.moveInputStarted: {
 				board.removeLegalMovesMarkers();
-
 				const moves = chess.moves({ square: event.squareFrom as any, verbose: true });
-
 				board.addLegalMovesMarkers(moves.map((m: any) => ({ to: m.to, capture: !!m.captured })));
 
-				updateOverlay(currentSettings, event.squareFrom);
+				if (moves.length > 0) {
+					updateOverlay(currentSettings, event.squareFrom);
+				}
 
 				return moves.length > 0;
 			}
 			case INPUT_EVENT_TYPE.validateMoveInput: {
-				updateOverlay(currentSettings);
 				board.removeLegalMovesMarkers();
+				updateOverlay(currentSettings);
 				try {
 					const result = chess.move({ from: event.squareFrom, to: event.squareTo, promotion: 'q' });
 					if (!result) return false;
@@ -124,8 +124,8 @@ export async function initOverchess(
 				}
 			}
 			case INPUT_EVENT_TYPE.moveInputCanceled:
-				updateOverlay(currentSettings);
 				board.removeLegalMovesMarkers();
+				updateOverlay(currentSettings);
 				break;
 		}
 		return true;
